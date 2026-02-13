@@ -254,6 +254,15 @@
             color: var(--yellow);
             text-shadow: 2px 2px 0 rgba(0,0,0,0.5);
         }
+        #finish-snapshot {
+            max-width: 520px; width: 100%;
+            border: 3px solid var(--yellow);
+            border-radius: 8px; overflow: hidden;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+        }
+        #finish-snapshot img {
+            width: 100%; display: block;
+        }
         .results-list {
             width: 100%; max-width: 520px;
             display: flex; flex-direction: column; gap: 6px;
@@ -271,6 +280,11 @@
         .res-dot { width: 12px; height: 12px; border-radius: 50%; flex-shrink: 0; }
         .res-name { flex: 1; }
         .res-time { color: #aaa; min-width: 80px; text-align: right; }
+        .res-stats {
+            font-size: 8px; color: #888;
+            display: flex; gap: 8px; margin-left: auto;
+        }
+        .res-stats span { white-space: nowrap; }
         .btn-group { display: flex; gap: 12px; margin-top: 8px; }
 
         @media (max-height: 500px) {
@@ -339,8 +353,10 @@
     <!-- Results -->
     <div id="result-screen" class="screen">
         <h2>FINISH!</h2>
+        <div id="finish-snapshot" style="margin-bottom: 16px;"></div>
         <div class="results-list" id="results-list"></div>
         <div class="btn-group">
+            <button class="btn" onclick="downloadResults()">📥 DOWNLOAD</button>
             <button class="btn" onclick="showSetup()">SETUP</button>
             <button class="btn primary" onclick="startRace()">REMATCH</button>
         </div>
@@ -387,9 +403,45 @@ let frame = 0;
 let particles = [];
 let spectators = [];
 let allDone = false;
+let finishSnapshot = null;  // Canvas snapshot when 1st place finishes
 
 // ── Audio ──
 let audioCtx;
+let bgMusic = null;
+let victoryMusic = null;
+
+function initMusic() {
+    if (!bgMusic) {
+        bgMusic = new Audio('mp3/bg.mp3');
+        bgMusic.loop = true;
+        bgMusic.volume = 0.4;
+    }
+    if (!victoryMusic) {
+        victoryMusic = new Audio('mp3/victory.mp3');
+        victoryMusic.loop = false;
+        victoryMusic.volume = 0.5;
+    }
+}
+
+function playBgMusic() {
+    initMusic();
+    stopAllMusic();
+    bgMusic.currentTime = 0;
+    bgMusic.play().catch(e => console.log('Audio play failed:', e));
+}
+
+function playVictoryMusic() {
+    initMusic();
+    stopAllMusic();
+    victoryMusic.currentTime = 0;
+    victoryMusic.play().catch(e => console.log('Audio play failed:', e));
+}
+
+function stopAllMusic() {
+    if (bgMusic) bgMusic.pause();
+    if (victoryMusic) victoryMusic.pause();
+}
+
 function tone(freq, dur, type='square', vol=0.06) {
     try {
         if (!audioCtx) audioCtx = new (window.AudioContext||window.webkitAudioContext)();
@@ -421,6 +473,7 @@ function showSetup() {
     state = 'setup';
     if (animId) { cancelAnimationFrame(animId); animId = null; }
     if (cdTimer) { clearTimeout(cdTimer); cdTimer = null; }
+    stopAllMusic();  // Stop all music when returning to setup
     showScreen('setup-screen');
     buildPlayerInputs();
 }
@@ -497,6 +550,8 @@ function makePlayer(name, colorIdx) {
         hopT: Math.random(), hopSpd: 0, wasAir: false,
         fx: null, fxTimer: 0, fxCooldown: 0,
         y: 0, laneTop: 0, laneH: 0,
+        // Stats tracking
+        boostCount: 0, tripCount: 0, sleepCount: 0,
     };
 }
 
@@ -683,11 +738,12 @@ function beginRace() {
     }
     generateSpectators();
 
-    finishOrder = []; pace = 1; frame = 0; particles = [];
+    finishOrder = []; pace = 1; frame = 0; particles = []; finishSnapshot = null;
     showScreen('game-screen');
 
     // Countdown
     state = 'countdown'; cdValue = 3;
+    playBgMusic();  // Start background music
     sfxTick();
     const countDown = () => {
         cdValue--;
@@ -760,14 +816,17 @@ function updateRace() {
             const roll = Math.random();
             if (roll < 0.003) {         // ~0.3% per frame ≈ every ~5.5s
                 p.fx = 'boost'; p.fxTimer = 55; p.fxCooldown = 120;
+                p.boostCount++;
                 sfxBoost();
                 spawnFxText(p, 'BOOST!', '#ffdd00');
             } else if (roll < 0.005) {  // ~0.2%
                 p.fx = 'trip'; p.fxTimer = 50; p.fxCooldown = 120;
+                p.tripCount++;
                 sfxTrip();
                 spawnFxText(p, 'TRIP!', '#ff4444');
             } else if (roll < 0.007) {  // ~0.2%
                 p.fx = 'sleep'; p.fxTimer = 80; p.fxCooldown = 120;
+                p.sleepCount++;
                 sfxSleep();
                 spawnFxText(p, 'Zzz..', '#88aaff');
             }
@@ -855,6 +914,12 @@ function updateRace() {
     for (const jf of justFinished) {
         jf.p.rank = finishOrder.length;
         finishOrder.push(jf.p);
+        
+        // Capture snapshot when 1st place finishes
+        if (finishOrder.length === 1 && !finishSnapshot) {
+            finishSnapshot = canvas.toDataURL('image/png');
+        }
+        
         sfxCross();
         // Celebration particles
         for (let i = 0; i < 20; i++) {
@@ -1250,6 +1315,15 @@ function showResults() {
     state = 'result';
     if (animId) { cancelAnimationFrame(animId); animId = null; }
     showScreen('result-screen');
+    playVictoryMusic();  // Play victory music
+
+    // Display finish snapshot
+    const snapshotDiv = document.getElementById('finish-snapshot');
+    if (finishSnapshot) {
+        snapshotDiv.innerHTML = `<img src="${finishSnapshot}" alt="1st place finish moment">`;
+    } else {
+        snapshotDiv.innerHTML = '';
+    }
 
     const box = document.getElementById('results-list');
     box.innerHTML = '';
@@ -1260,13 +1334,140 @@ function showResults() {
         const p = finishOrder[i];
         const row = document.createElement('div');
         row.className = 'res-row' + (i===0?' w':'');
+        
+        // Build stats string
+        const stats = [];
+        if (p.boostCount > 0) stats.push(`🚀${p.boostCount}`);
+        if (p.tripCount > 0) stats.push(`💥${p.tripCount}`);
+        if (p.sleepCount > 0) stats.push(`💤${p.sleepCount}`);
+        const statsHtml = stats.length > 0 
+            ? `<div class="res-stats">${stats.map(s => `<span>${s}</span>`).join('')}</div>` 
+            : '';
+        
         row.innerHTML = `
             <span class="res-rank ${rcls[i]}">${ranks[i]}</span>
             <div class="res-dot" style="background:${p.color.hex}"></div>
             <span class="res-name">${p.name}</span>
+            ${statsHtml}
             <span class="res-time">${p.finishTime.toFixed(2)}s</span>`;
         box.appendChild(row);
     }
+}
+
+// ── Download Results ──
+function downloadResults() {
+    const downloadCanvas = document.createElement('canvas');
+    const dctx = downloadCanvas.getContext('2d');
+    const W = 800, H = 1000;
+    downloadCanvas.width = W;
+    downloadCanvas.height = H;
+    
+    // Background
+    dctx.fillStyle = '#0a0a1a';
+    dctx.fillRect(0, 0, W, H);
+    
+    let yPos = 40;
+    
+    // Title
+    dctx.font = 'bold 32px "Press Start 2P", monospace';
+    dctx.textAlign = 'center';
+    dctx.fillStyle = '#ffd700';
+    dctx.fillText('SLIME DERBY', W/2, yPos);
+    dctx.fillStyle = '#58d854';
+    dctx.font = 'bold 24px "Press Start 2P", monospace';
+    dctx.fillText('FINISH!', W/2, yPos + 45);
+    
+    yPos += 90;
+    
+    // Finish snapshot
+    if (finishSnapshot) {
+        const img = new Image();
+        img.src = finishSnapshot;
+        const snapW = 700, snapH = 420;
+        const snapX = (W - snapW) / 2;
+        dctx.drawImage(img, snapX, yPos, snapW, snapH);
+        
+        // Border
+        dctx.strokeStyle = '#ffd700';
+        dctx.lineWidth = 4;
+        dctx.strokeRect(snapX, yPos, snapW, snapH);
+        
+        yPos += snapH + 40;
+    }
+    
+    // Results
+    dctx.font = 'bold 20px "Press Start 2P", monospace';
+    dctx.fillStyle = '#fff';
+    dctx.textAlign = 'left';
+    dctx.fillText('RESULTS', 50, yPos);
+    yPos += 35;
+    
+    const ranks = ['1ST','2ND','3RD','4TH','5TH','6TH','7TH','8TH'];
+    const rankColors = ['#ffd700','#c0c0c0','#cd7f32','#fff','#fff','#fff','#fff','#fff'];
+    
+    for (let i = 0; i < finishOrder.length; i++) {
+        const p = finishOrder[i];
+        const rowH = 50;
+        const x = 50;
+        
+        // Background
+        if (i === 0) {
+            dctx.fillStyle = 'rgba(255,215,0,0.1)';
+            dctx.fillRect(x, yPos, W - 100, rowH);
+            dctx.strokeStyle = '#ffd700';
+            dctx.lineWidth = 2;
+            dctx.strokeRect(x, yPos, W - 100, rowH);
+        } else {
+            dctx.fillStyle = '#1a1a3a';
+            dctx.fillRect(x, yPos, W - 100, rowH);
+            dctx.strokeStyle = '#2a2a4a';
+            dctx.lineWidth = 1;
+            dctx.strokeRect(x, yPos, W - 100, rowH);
+        }
+        
+        // Rank
+        dctx.font = 'bold 16px "Press Start 2P", monospace';
+        dctx.fillStyle = rankColors[i];
+        dctx.textAlign = 'left';
+        dctx.fillText(ranks[i], x + 15, yPos + 30);
+        
+        // Color dot
+        dctx.fillStyle = p.color.hex;
+        dctx.beginPath();
+        dctx.arc(x + 110, yPos + 25, 10, 0, Math.PI * 2);
+        dctx.fill();
+        
+        // Name
+        dctx.font = 'bold 14px "Press Start 2P", monospace';
+        dctx.fillStyle = '#fff';
+        dctx.fillText(p.name, x + 135, yPos + 30);
+        
+        // Stats
+        const stats = [];
+        if (p.boostCount > 0) stats.push(`🚀${p.boostCount}`);
+        if (p.tripCount > 0) stats.push(`💥${p.tripCount}`);
+        if (p.sleepCount > 0) stats.push(`💤${p.sleepCount}`);
+        if (stats.length > 0) {
+            dctx.font = '12px "Press Start 2P", monospace';
+            dctx.fillStyle = '#888';
+            dctx.fillText(stats.join(' '), x + 320, yPos + 30);
+        }
+        
+        // Time
+        dctx.font = 'bold 14px "Press Start 2P", monospace';
+        dctx.fillStyle = '#aaa';
+        dctx.textAlign = 'right';
+        dctx.fillText(p.finishTime.toFixed(2) + 's', W - 65, yPos + 30);
+        
+        yPos += rowH + 10;
+    }
+    
+    // Download
+    const link = document.createElement('a');
+    const timestamp = new Date().toISOString().slice(0,19).replace(/:/g,'-');
+    link.download = `slime-derby-${timestamp}.png`;
+    link.href = downloadCanvas.toDataURL('image/png');
+    link.click();
 }
 
 // ── Game loop ──
