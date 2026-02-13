@@ -904,7 +904,8 @@ function buildPlayerInputs() {
             <input class="sd-input" type="text" maxlength="8"
                    data-idx="${i}" placeholder="${placeholder}"
                    value="${old[i] !== undefined ? old[i] : ''}"
-                   onblur="saveSetup()">`;
+                   onblur="saveSetup()"
+                   onkeydown="if(event.key==='Enter'){event.preventDefault();const next=this.closest('.player-row').nextElementSibling;if(next){next.querySelector('input').focus();}else{document.activeElement.blur();}}">`;
         wrap.appendChild(row);
     }
     box.appendChild(wrap);
@@ -1363,7 +1364,32 @@ function updateRace() {
             let rp, cheers;
             const rand = Math.random();
             
-            if (elapsed / targetTime < 0.3) {
+            if (finishOrder.length > 0) {
+                // After 1st place finished - mostly celebrate the winner + betting reactions
+                if (rand < 0.5) {
+                    // 50% - Celebrate the winner!
+                    rp = finishOrder[0];
+                    cheers = ['{n} 우승이야!', '{n} 1등!!', '{n} 완주!!', '축하해 {n}!',
+                             '{n} 대단해!', '{n} 최고!!', '{n} 멋지다!', '{n} 승리!!'];
+                } else if (rand < 0.75) {
+                    // 25% - Betting reactions (no name)
+                    rp = { name: '' };  // Empty name for general messages
+                    cheers = ['나 당첨이야!', '대박!!', '망했어..', '아 진짜ㅠㅠ', 
+                             '다맞췄다!', '완전 꽝..', '예상 적중!', '이럴수가ㅠ',
+                             '돈 날렸어', '역시 1등!', '아깝다!'];
+                } else {
+                    // 25% - Encourage remaining racers
+                    const remaining = players.filter(p => !p.finished);
+                    if (remaining.length > 0) {
+                        rp = remaining[Math.floor(Math.random() * remaining.length)];
+                        cheers = ['{n} 힘내!', '{n} 포기마!', '할수있어 {n}!', '{n} 파이팅!', 
+                                 '{n} 달려!', '아자아자 {n}!'];
+                    } else {
+                        rp = finishOrder[0];
+                        cheers = ['{n} 우승!!', '축하해 {n}!'];
+                    }
+                }
+            } else if (elapsed / targetTime < 0.3) {
                 // Early race - encourage everyone
                 rp = players[Math.floor(Math.random() * players.length)];
                 cheers = ['{n} 화이팅!', '가자 {n}!', '{n} 힘내!', '달려 {n}!', '좋아 {n}!'];
