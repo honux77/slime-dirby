@@ -561,6 +561,14 @@ function showSetup() {
     if (animId) { cancelAnimationFrame(animId); animId = null; }
     if (cdTimer) { clearTimeout(cdTimer); cdTimer = null; }
     stopAllMusic();  // Stop all music when returning to setup
+    
+    // Reset canvas transform if exists
+    const raceCanvas = document.getElementById('race-canvas');
+    if (raceCanvas) {
+        raceCanvas.style.transform = '';
+        raceCanvas.style.transformOrigin = '';
+    }
+    
     showScreen('setup-screen');
     buildPlayerInputs();
 }
@@ -812,9 +820,11 @@ function beginRace() {
     canvas.width = CW; canvas.height = CH;
     ctx.imageSmoothingEnabled = false;
     
-    // Mobile detection
+    // Mobile detection and camera reset
     isMobile = window.innerWidth <= 768;
     cameraX = 0;
+    canvas.style.transform = '';  // Ensure no transform on start
+    canvas.style.transformOrigin = '';
 
     // Lane positions (accounting for crowd bands)
     const raceCount = players.length;
@@ -830,8 +840,6 @@ function beginRace() {
     generateSpectators();
 
     finishOrder = []; pace = 1; frame = 0; particles = []; finishSnapshot = null;
-    cameraX = 0;  // Reset camera
-    if (canvas) canvas.style.transform = '';
     showScreen('game-screen');
 
     // Countdown
@@ -1454,6 +1462,7 @@ function showResults() {
     // Reset camera transform
     if (canvas) {
         canvas.style.transform = '';
+        canvas.style.transformOrigin = '';
     }
     
     showScreen('result-screen');
