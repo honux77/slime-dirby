@@ -149,7 +149,16 @@
             align-items: center; justify-content: center;
         }
         .count-btn:hover { background: var(--white); color: var(--bg); }
-        #player-count { font-size: 22px; min-width: 36px; text-align: center; }
+        #player-count {
+            font-family: 'Press Start 2P', monospace;
+            font-size: 16px; width: 76px; text-align: center;
+            background: var(--panel); color: var(--white);
+            border: 2px solid var(--border); outline: none;
+            padding: 6px 2px; -moz-appearance: textfield;
+        }
+        #player-count::-webkit-inner-spin-button,
+        #player-count::-webkit-outer-spin-button { -webkit-appearance: none; }
+        #player-count:focus { border-color: var(--white); }
         .player-list {
             width: 100%; max-width: 480px;
             display: flex; flex-direction: column; gap: 6px;
@@ -170,8 +179,65 @@
             flex: 1; max-width: 200px;
         }
         .nes-input:focus { border-color: var(--white); }
+        .nes-checkbox {
+            display: flex; align-items: center; gap: 10px;
+            cursor: pointer; font-size: 9px; user-select: none;
+        }
+        .nes-checkbox input { display: none; }
+        .check-box {
+            width: 18px; height: 18px;
+            border: 3px solid #666; background: var(--panel);
+            position: relative; flex-shrink: 0;
+        }
+        .nes-checkbox input:checked + .check-box {
+            border-color: var(--green);
+        }
+        .nes-checkbox input:checked + .check-box::after {
+            content: ''; position: absolute;
+            top: 2px; left: 2px; right: 2px; bottom: 2px;
+            background: var(--green);
+        }
+        .name-scroll {
+            max-height: 200px; overflow-y: auto; width: 100%;
+            display: flex; flex-direction: column; gap: 4px;
+        }
+        .name-scroll::-webkit-scrollbar { width: 6px; }
+        .name-scroll::-webkit-scrollbar-track { background: var(--panel); }
+        .name-scroll::-webkit-scrollbar-thumb { background: #444; border-radius: 3px; }
         .time-input { width: 56px!important; max-width: 56px!important; text-align: center; }
         .unit { font-size: 9px; color: var(--gray); }
+        .select-info {
+            font-size: 9px; color: var(--yellow); line-height: 1.8;
+            text-align: center; padding: 14px;
+            border: 2px dashed var(--border);
+            width: 100%; max-width: 480px;
+        }
+
+        /* ===== Draw screen ===== */
+        #select-screen h2 {
+            font-size: clamp(14px, 3vw, 22px);
+            color: var(--yellow);
+            text-shadow: 2px 2px 0 rgba(0,0,0,0.5);
+            margin-bottom: 6px;
+        }
+        .draw-sub { font-size: 10px; color: var(--gray); margin-bottom: 12px; }
+        .draw-grid {
+            display: grid; grid-template-columns: repeat(4, 1fr);
+            gap: 10px; width: 100%; max-width: 460px; margin: 8px 0;
+        }
+        .draw-card {
+            display: flex; align-items: center; gap: 8px;
+            padding: 10px 12px; background: var(--panel);
+            border: 3px solid; font-size: 11px;
+            animation: cardPop 0.35s ease-out both;
+        }
+        .draw-dot {
+            width: 12px; height: 12px; border-radius: 50%; flex-shrink: 0;
+        }
+        @keyframes cardPop {
+            from { transform: scale(0) rotate(-10deg); opacity: 0; }
+            to { transform: scale(1) rotate(0); opacity: 1; }
+        }
 
         /* ===== Game ===== */
         #game-screen { padding: 0; }
@@ -233,9 +299,17 @@
             <span class="setup-label">참가 슬라임</span>
             <div class="count-controls">
                 <button class="count-btn" onclick="changeCount(-1)">-</button>
-                <span id="player-count">4</span>
+                <input type="number" id="player-count" value="4" min="2" max="1000" oninput="setCount(this.value)">
                 <button class="count-btn" onclick="changeCount(1)">+</button>
             </div>
+        </div>
+        <div class="setup-row">
+            <span class="setup-label"></span>
+            <label class="nes-checkbox">
+                <input type="checkbox" id="use-names" onchange="buildPlayerInputs()">
+                <span class="check-box"></span>
+                <span>이름 입력</span>
+            </label>
         </div>
         <div class="player-list" id="player-list"></div>
         <div class="setup-row">
@@ -246,6 +320,14 @@
         <button class="btn primary" onclick="startRace()" style="margin-top:12px;font-size:14px">
             START RACE!
         </button>
+    </div>
+
+    <!-- Draw (selection) -->
+    <div id="select-screen" class="screen">
+        <h2>RANDOM DRAW</h2>
+        <p class="draw-sub">총 <span id="draw-total">0</span>명 중 <span style="color:var(--green)">8</span>명 선발!</p>
+        <div class="draw-grid" id="draw-grid"></div>
+        <button class="btn primary" onclick="beginRace()" style="margin-top:12px;font-size:14px">START RACE!</button>
     </div>
 
     <!-- Game -->
@@ -338,66 +420,148 @@ function showSetup() {
 
 // ── Setup UI ──
 function changeCount(d) {
-    playerCount = Math.max(2, Math.min(8, playerCount + d));
-    document.getElementById('player-count').textContent = playerCount;
+    playerCount = Math.max(2, Math.min(1000, playerCount + d));
+    document.getElementById('player-count').value = playerCount;
     buildPlayerInputs();
     sfxTick();
 }
 
+function setCount(val) {
+    const n = parseInt(val);
+    if (!isNaN(n)) playerCount = Math.max(2, Math.min(1000, n));
+    buildPlayerInputs();
+}
+
 function buildPlayerInputs() {
     const box = document.getElementById('player-list');
-    // Remember existing names
+    const useNames = document.getElementById('use-names').checked;
+
+    // Remember existing names before clearing
     const old = {};
     box.querySelectorAll('input').forEach(inp => {
-        old[inp.dataset.idx] = inp.value;
+        if (inp.dataset.idx != null) old[inp.dataset.idx] = inp.value;
     });
     box.innerHTML = '';
-    for (let i = 0; i < playerCount; i++) {
+
+    // Info banner for > 8
+    if (playerCount > 8) {
+        const info = document.createElement('div');
+        info.className = 'select-info';
+        info.innerHTML = `총 ${playerCount}명 중 8명이<br>랜덤으로 선발됩니다`;
+        box.appendChild(info);
+    }
+
+    if (!useNames) return;
+
+    // Name inputs
+    const wrap = document.createElement('div');
+    if (playerCount > 8) wrap.className = 'name-scroll';
+    const count = playerCount;
+    for (let i = 0; i < count; i++) {
         const row = document.createElement('div');
         row.className = 'player-row';
+        const placeholder = i < 8 && playerCount <= 8 ? DEFAULT_NAMES[i] : `참가자${i + 1}`;
+        const dot = playerCount <= 8
+            ? `<div class="color-dot" style="background:${SLIME_COLORS[i].hex}"></div>` : '';
         row.innerHTML = `
-            <div class="color-dot" style="background:${SLIME_COLORS[i].hex}"></div>
+            ${dot}
             <span class="player-num">${i+1}.</span>
             <input class="nes-input" type="text" maxlength="8"
-                   data-idx="${i}" placeholder="${DEFAULT_NAMES[i]}"
+                   data-idx="${i}" placeholder="${placeholder}"
                    value="${old[i] !== undefined ? old[i] : ''}">`;
-        box.appendChild(row);
+        wrap.appendChild(row);
     }
+    box.appendChild(wrap);
+}
+
+// ── Player factory ──
+function makePlayer(name, colorIdx) {
+    return {
+        name, color: SLIME_COLORS[colorIdx],
+        pos: 0, speed: 0,
+        mult: 0.8 + Math.random() * 0.4,
+        talent: 0.92 + Math.random() * 0.16,
+        changeTimer: 20 + Math.floor(Math.random() * 40),
+        nextChange: 0,
+        finished: false, finishTime: 0, rank: -1,
+        hopT: Math.random(), hopSpd: 0, wasAir: false,
+        y: 0, laneTop: 0, laneH: 0,
+    };
+}
+
+function pickRandom(total, k) {
+    const set = new Set();
+    while (set.size < k) set.add(Math.floor(Math.random() * total) + 1);
+    return [...set].sort((a, b) => a - b);
 }
 
 // ── Start race ──
 function startRace() {
-    const inputs = document.querySelectorAll('#player-list input');
-    players = [];
-    for (let i = 0; i < playerCount; i++) {
-        const name = (inputs[i]?.value.trim()) || DEFAULT_NAMES[i];
-        players.push({
-            name, color: SLIME_COLORS[i],
-            pos: 0, speed: 0,
-            mult: 0.8 + Math.random() * 0.4,
-            talent: 0.92 + Math.random() * 0.16,
-            changeTimer: 20 + Math.floor(Math.random() * 40),
-            nextChange: 0,
-            finished: false, finishTime: 0, rank: -1,
-            hopT: Math.random(),       // hop cycle phase 0-1
-            hopSpd: 0,                 // hop cycle speed (set during race)
-            wasAir: false,             // was airborne last frame
-            y: 0, laneTop: 0, laneH: 0,
+    playerCount = Math.max(2, Math.min(1000,
+        parseInt(document.getElementById('player-count').value) || 4));
+    document.getElementById('player-count').value = playerCount;
+    targetTime = Math.max(3, Math.min(60,
+        parseInt(document.getElementById('time-input').value) || 10));
+    const useNames = document.getElementById('use-names').checked;
+
+    // Collect entered names (indexed by 0-based position)
+    const nameMap = {};
+    if (useNames) {
+        document.querySelectorAll('#player-list input[data-idx]').forEach(inp => {
+            const v = inp.value.trim();
+            if (v) nameMap[parseInt(inp.dataset.idx)] = v;
         });
     }
 
-    targetTime = Math.max(3, Math.min(60,
-        parseInt(document.getElementById('time-input').value) || 10));
+    if (playerCount <= 8) {
+        players = [];
+        for (let i = 0; i < playerCount; i++) {
+            const name = nameMap[i] || DEFAULT_NAMES[i];
+            players.push(makePlayer(name, i));
+        }
+        beginRace();
+    } else {
+        const picked = pickRandom(playerCount, 8);
+        players = [];
+        for (let i = 0; i < 8; i++) {
+            const num = picked[i];
+            const name = nameMap[num - 1] || ('#' + num);
+            players.push(makePlayer(name, i));
+        }
+        showDraw(picked);
+    }
+}
 
+function showDraw(picked) {
+    state = 'draw';
+    showScreen('select-screen');
+    document.getElementById('draw-total').textContent = playerCount;
+    const grid = document.getElementById('draw-grid');
+    grid.innerHTML = '';
+    for (let i = 0; i < picked.length; i++) {
+        const card = document.createElement('div');
+        card.className = 'draw-card';
+        card.style.borderColor = SLIME_COLORS[i].hex;
+        card.style.animationDelay = (i * 0.12) + 's';
+        const label = players[i].name;
+        card.innerHTML = `
+            <div class="draw-dot" style="background:${SLIME_COLORS[i].hex}"></div>
+            <span>${label}</span>`;
+        grid.appendChild(card);
+    }
+}
+
+function beginRace() {
     canvas = document.getElementById('race-canvas');
     ctx = canvas.getContext('2d');
     canvas.width = CW; canvas.height = CH;
     ctx.imageSmoothingEnabled = false;
 
     // Lane positions
+    const raceCount = players.length;
     const trackH = CH - HEADER_H - 6;
-    const laneH = trackH / playerCount;
-    for (let i = 0; i < players.length; i++) {
+    const laneH = trackH / raceCount;
+    for (let i = 0; i < raceCount; i++) {
         players[i].laneTop = HEADER_H + laneH * i;
         players[i].laneH = laneH;
         players[i].y = HEADER_H + laneH * i + laneH / 2;
