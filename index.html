@@ -252,6 +252,7 @@
         #game-screen { 
             padding: 0;
             background: #000;
+            overflow: hidden;
         }
         #race-canvas {
             max-width: 100%;
@@ -261,6 +262,7 @@
             image-rendering: pixelated;
             image-rendering: crisp-edges;
             object-fit: contain;
+            transition: transform 0.15s ease-out;
         }
 
         /* ===== Results ===== */
@@ -487,6 +489,8 @@ let particles = [];
 let spectators = [];
 let allDone = false;
 let finishSnapshot = null;  // Canvas snapshot when 1st place finishes
+let isMobile = false;  // Mobile detection
+let cameraX = 0;  // Camera position for mobile
 
 // ── Audio ──
 let audioCtx;
@@ -807,6 +811,10 @@ function beginRace() {
     ctx = canvas.getContext('2d');
     canvas.width = CW; canvas.height = CH;
     ctx.imageSmoothingEnabled = false;
+    
+    // Mobile detection
+    isMobile = window.innerWidth <= 768;
+    cameraX = 0;
 
     // Lane positions (accounting for crowd bands)
     const raceCount = players.length;
@@ -822,6 +830,8 @@ function beginRace() {
     generateSpectators();
 
     finishOrder = []; pace = 1; frame = 0; particles = []; finishSnapshot = null;
+    cameraX = 0;  // Reset camera
+    if (canvas) canvas.style.transform = '';
     showScreen('game-screen');
 
     // Countdown
@@ -1050,6 +1060,33 @@ function updateRace() {
         state = 'finished';
         sfxFanfare();
         setTimeout(showResults, 2200);
+    }
+    
+    // Update camera position for mobile (follow leader)
+    if (isMobile && state === 'racing') {
+        let leadPos = 0;
+        for (const p of players) {
+            if (!p.finished && p.pos > leadPos) {
+                leadPos = p.pos;
+            }
+        }
+        // Camera follows leader - keep leader at 1/3 from left edge
+        const scale = 2.0;  // Zoom level
+        const viewportWidth = window.innerWidth / scale;
+        const targetX = TRACK_L + leadPos - viewportWidth * 0.33;
+        const targetCameraX = -targetX * scale;
+        
+        // Smooth camera movement
+        cameraX += (targetCameraX - cameraX) * 0.15;
+        
+        // Clamp camera to track bounds
+        const minX = 0;
+        const maxX = -(CW * scale - window.innerWidth);
+        cameraX = Math.max(maxX, Math.min(minX, cameraX));
+        
+        // Apply camera transform
+        canvas.style.transform = `translateX(${cameraX}px) scale(${scale})`;
+        canvas.style.transformOrigin = 'left center';
     }
 }
 
@@ -1397,6 +1434,12 @@ function drawSlime(x, y, size, sx, sy, color, crown) {
 function showResults() {
     state = 'result';
     if (animId) { cancelAnimationFrame(animId); animId = null; }
+    
+    // Reset camera transform
+    if (canvas) {
+        canvas.style.transform = '';
+    }
+    
     showScreen('result-screen');
     playVictoryMusic();  // Play victory music
 
