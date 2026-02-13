@@ -440,6 +440,14 @@
                 <span>NES 캐릭터</span>
             </label>
         </div>
+        <div class="setup-row">
+            <span class="setup-label"></span>
+            <label class="sd-checkbox">
+                <input type="checkbox" id="early-finish" checked onchange="saveSetup()">
+                <span class="sd-check-box"></span>
+                <span>조기 종료</span>
+            </label>
+        </div>
         <div class="player-list" id="player-list"></div>
         <div class="setup-row">
             <span class="setup-label">레이스 시간</span>
@@ -515,6 +523,8 @@ const NES_CHARS = [
 ];
 let nesCharImages = [];
 let useNESChars = false;
+let earlyFinish = false;
+let earlyFinishTime = 0; // timestamp when 1st place finished
 
 // ── Canvas constants ──
 const CW = 800, CH = 480;
@@ -788,7 +798,7 @@ function makePlayer(name, colorIdx) {
         talent: 0.92 + Math.random() * 0.16,
         changeTimer: 20 + Math.floor(Math.random() * 40),
         nextChange: 0,
-        finished: false, finishTime: 0, rank: -1,
+        finished: false, finishTime: 0, rank: -1, dnf: false,
         hopT: Math.random(), hopSpd: 0, wasAir: false,
         fx: null, fxTimer: 0, fxCooldown: 0,
         y: 0, laneTop: 0, laneH: 0,
@@ -968,6 +978,8 @@ function beginRace() {
     // Read NES character toggle
     useNESChars = document.getElementById('use-nes-chars').checked;
     if (useNESChars) preRenderNESChars();
+    earlyFinish = document.getElementById('early-finish').checked;
+    earlyFinishTime = 0;
 
     canvas = document.getElementById('race-canvas');
     ctx = canvas.getContext('2d');
@@ -1056,11 +1068,11 @@ function updateRace() {
     for (const p of players) {
         if (!p.finished) minProg = Math.min(minProg, p.pos / TRACK_LEN);
     }
-    const expected = Math.min(elapsed / targetTime, 0.98);
+    const expected = Math.min(elapsed / targetTime, 1.0);
     if (minProg > 0.005) {
         const target = expected / minProg;
-        pace += (target - pace) * 0.015;
-        pace = Math.max(0.15, Math.min(4, pace));
+        pace += (target - pace) * 0.08;
+        pace = Math.max(0.15, Math.min(6, pace));
     }
 
     allDone = true;
@@ -1191,6 +1203,7 @@ function updateRace() {
         // Capture snapshot when 1st place finishes
         if (finishOrder.length === 1 && !finishSnapshot) {
             finishSnapshot = canvas.toDataURL('image/png');
+            if (earlyFinish) earlyFinishTime = performance.now();
         }
         
         sfxCross();
@@ -1234,6 +1247,24 @@ function updateRace() {
         if (pt.grav) { pt.x += pt.vx; pt.y += pt.vy; pt.vy += 0.12; }
         else { pt.x += pt.vx||0; pt.y += pt.vy||0; }
         if (pt.life <= 0) particles.splice(i, 1);
+    }
+
+    // Early finish: 3 seconds after 1st place, force-finish remaining players
+    if (earlyFinish && earlyFinishTime > 0 && !allDone && state === 'racing') {
+        const sinceWin = (performance.now() - earlyFinishTime) / 1000;
+        if (sinceWin >= 3) {
+            // Rank unfinished players by current position (descending)
+            const unfinished = players.filter(p => !p.finished);
+            unfinished.sort((a, b) => b.pos - a.pos);
+            for (const p of unfinished) {
+                p.finished = true;
+                p.dnf = true;
+                p.finishTime = elapsed;
+                p.rank = finishOrder.length;
+                finishOrder.push(p);
+            }
+            allDone = true;
+        }
     }
 
     if (allDone && state === 'racing') {
@@ -1723,12 +1754,13 @@ function showResults() {
             ? `<div class="res-stats">${stats.map(s => `<span>${s}</span>`).join('')}</div>` 
             : '';
         
+        const timeText = p.dnf ? 'DNF' : `${p.finishTime.toFixed(2)}s`;
         row.innerHTML = `
             <span class="res-rank ${rcls[i]}">${ranks[i]}</span>
             <div class="res-dot" style="background:${p.color.hex}"></div>
             <span class="res-name">${p.name}</span>
             ${statsHtml}
-            <span class="res-time">${p.finishTime.toFixed(2)}s</span>`;
+            <span class="res-time">${timeText}</span>`;
         box.appendChild(row);
     }
 }
@@ -1834,9 +1866,9 @@ function downloadResults() {
         
         // Time
         dctx.font = 'bold 14px "Press Start 2P", monospace';
-        dctx.fillStyle = '#aaa';
+        dctx.fillStyle = p.dnf ? '#ff6666' : '#aaa';
         dctx.textAlign = 'right';
-        dctx.fillText(p.finishTime.toFixed(2) + 's', W - 65, yPos + 30);
+        dctx.fillText(p.dnf ? 'DNF' : p.finishTime.toFixed(2) + 's', W - 65, yPos + 30);
         
         yPos += rowH + 10;
     }
@@ -1870,6 +1902,7 @@ function saveSetup() {
         count: playerCount,
         useNames: document.getElementById('use-names').checked,
         useNESChars: document.getElementById('use-nes-chars').checked,
+        earlyFinish: document.getElementById('early-finish').checked,
         names,
         time: parseInt(document.getElementById('time-input').value) || 10,
     };
@@ -1891,6 +1924,9 @@ function loadSetup() {
         if (d.useNESChars) {
             document.getElementById('use-nes-chars').checked = true;
         }
+        if (d.earlyFinish !== undefined) {
+            document.getElementById('early-finish').checked = d.earlyFinish;
+        }
         if (d.time != null) {
             document.getElementById('time-input').value = Math.max(3, Math.min(60, d.time));
         }
@@ -1911,6 +1947,7 @@ function resetSetup() {
     document.getElementById('player-count').value = 4;
     document.getElementById('use-names').checked = false;
     document.getElementById('use-nes-chars').checked = false;
+    document.getElementById('early-finish').checked = true;
     document.getElementById('time-input').value = 10;
     buildPlayerInputs();
     sfxTick();
