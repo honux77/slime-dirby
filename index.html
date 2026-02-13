@@ -386,6 +386,7 @@ let pace = 1;
 let frame = 0;
 let particles = [];
 let spectators = [];
+let allDone = false;
 
 // ── Audio ──
 let audioCtx;
@@ -733,7 +734,7 @@ function updateRace() {
         pace = Math.max(0.15, Math.min(4, pace));
     }
 
-    let allDone = true;
+    allDone = true;
     const justFinished = [];
 
     for (const p of players) {
@@ -869,20 +870,21 @@ function updateRace() {
 
     // Crowd cheering text
     if (!allDone) {
-        const cheerRate = elapsed / targetTime > 0.7 ? 0.014 : 0.006;
+        const cheerRate = elapsed / targetTime > 0.7 ? 0.04 : 0.02;  // Much higher frequency
         if (Math.random() < cheerRate) {
             const cheers = ['{n} 이겨라!','{n} 화이팅!','달려 {n}!','{n} 힘내!',
                 '가자 {n}!','{n}!!','빨리빨리!','우와~!','파이팅!','최고 {n}!'];
+            const cheerColors = ['#c92a2a','#087f5b','#c2255c','#5f3dc4','#1864ab','#0b7285','#2b8a3e','#d9480f'];
             const rp = players[Math.floor(Math.random() * players.length)];
             const text = pick(cheers).replace('{n}', rp.name);
             const isTop = Math.random() > 0.5;
             particles.push({
                 x: TRACK_L + 40 + Math.random() * (TRACK_LEN - 100),
                 y: isTop ? HEADER_H + CROWD_H - 6 : CH - CROWD_H + 6,
-                vx: (Math.random() - 0.5) * 0.3,
-                vy: isTop ? -0.35 : 0.35,
-                size: 0, life: 55, maxLife: 55,
-                color: rp.color.hex, grav: false, text,
+                vx: (Math.random() - 0.5) * 0.15,  // Slower horizontal movement
+                vy: isTop ? 0.2 : -0.2,  // Slower vertical movement toward track
+                size: 0, life: 120, maxLife: 120,  // Doubled lifetime (2 seconds at 60fps)
+                color: pick(cheerColors), grav: false, text,
             });
         }
     }
@@ -1015,19 +1017,11 @@ function render() {
         }
     }
 
-    // Particles (behind slimes)
+    // Particles (behind slimes) - only non-text particles
     for (const pt of particles) {
-        const a = pt.life / pt.maxLife;
-        ctx.globalAlpha = a * 0.8;
-        if (pt.text) {
-            const fs = pt.text.length > 5 ? 6 : pt.text.length > 2 ? 8 : 10;
-            ctx.font = `bold ${fs}px "Press Start 2P"`;
-            ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-            ctx.fillStyle = '#000';
-            ctx.fillText(pt.text, pt.x + 1, pt.y + 1);
-            ctx.fillStyle = pt.color;
-            ctx.fillText(pt.text, pt.x, pt.y);
-        } else {
+        if (!pt.text) {
+            const a = pt.life / pt.maxLife;
+            ctx.globalAlpha = a * 0.8;
             ctx.fillStyle = pt.color;
             ctx.beginPath();
             ctx.arc(pt.x, pt.y, pt.size, 0, Math.PI*2);
@@ -1106,6 +1100,39 @@ function render() {
         ctx.shadowBlur = 0;
         ctx.globalAlpha = 1;
     }
+
+    // Text particles (crowd cheers) - drawn on top of slimes
+    for (const pt of particles) {
+        if (pt.text) {
+            const a = pt.life / pt.maxLife;
+            ctx.globalAlpha = a * 0.9;
+            const fs = pt.text.length > 5 ? 6 : pt.text.length > 2 ? 8 : 10;
+            ctx.font = `bold ${fs}px "Press Start 2P"`;
+            ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+            
+            // Measure text for bubble size
+            const metrics = ctx.measureText(pt.text);
+            const textW = metrics.width;
+            const textH = fs;
+            const padding = 4;
+            const bubbleW = textW + padding * 2;
+            const bubbleH = textH + padding * 2;
+            
+            // Draw speech bubble background
+            ctx.fillStyle = '#fff';
+            ctx.strokeStyle = '#000';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.roundRect(pt.x - bubbleW/2, pt.y - bubbleH/2, bubbleW, bubbleH, 3);
+            ctx.fill();
+            ctx.stroke();
+            
+            // Draw text
+            ctx.fillStyle = pt.color;
+            ctx.fillText(pt.text, pt.x, pt.y);
+        }
+    }
+    ctx.globalAlpha = 1;
 
     ctx.textBaseline = 'alphabetic';
 }
