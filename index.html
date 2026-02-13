@@ -27,6 +27,7 @@
     <meta name="twitter:description" content="귀여운 슬라임들의 레이싱 게임! 슬라임을 선택해서 경주에서 우승하세요 🏆" />
     <meta name="twitter:image" content="https://honux77.github.io/slime-derby/og-image.png" />
     
+    <link href="https://unpkg.com/nes.css@latest/css/nes.min.css" rel="stylesheet" />
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
     <style>
@@ -41,6 +42,8 @@
             --border: #333;
         }
         * { margin: 0; padding: 0; box-sizing: border-box; }
+        /* Override NES.css global resets */
+        label { display: inline; margin-bottom: 0; }
         body {
             font-family: 'Press Start 2P', monospace;
             background: var(--bg);
@@ -179,7 +182,7 @@
             align-items: center; justify-content: center;
         }
         .count-btn:hover { background: var(--white); color: var(--bg); }
-        #player-count {
+        #player-count, #time-input {
             font-family: 'Press Start 2P', monospace;
             font-size: 16px; width: 76px; text-align: center;
             background: var(--panel); color: var(--white);
@@ -187,8 +190,10 @@
             padding: 6px 2px; -moz-appearance: textfield;
         }
         #player-count::-webkit-inner-spin-button,
-        #player-count::-webkit-outer-spin-button { -webkit-appearance: none; }
-        #player-count:focus { border-color: var(--white); }
+        #player-count::-webkit-outer-spin-button,
+        #time-input::-webkit-inner-spin-button,
+        #time-input::-webkit-outer-spin-button { -webkit-appearance: none; }
+        #player-count:focus, #time-input:focus { border-color: var(--white); }
         .player-list {
             width: 100%; max-width: 480px;
             display: flex; flex-direction: column; gap: 6px;
@@ -201,28 +206,28 @@
             border: 2px solid rgba(255,255,255,0.5); flex-shrink: 0;
         }
         .player-num { font-size: 9px; min-width: 20px; }
-        .nes-input {
+        .sd-input {
             font-family: 'Press Start 2P', monospace;
             font-size: 9px; padding: 7px 10px;
             background: #0a0a0a; color: var(--white);
             border: 2px solid #444; outline: none;
             flex: 1; max-width: 200px;
         }
-        .nes-input:focus { border-color: var(--white); }
-        .nes-checkbox {
+        .sd-input:focus { border-color: var(--white); }
+        .sd-checkbox {
             display: flex; align-items: center; gap: 10px;
             cursor: pointer; font-size: 9px; user-select: none;
         }
-        .nes-checkbox input { display: none; }
-        .check-box {
+        .sd-checkbox input { display: none; }
+        .sd-check-box {
             width: 18px; height: 18px;
             border: 3px solid #666; background: var(--panel);
             position: relative; flex-shrink: 0;
         }
-        .nes-checkbox input:checked + .check-box {
+        .sd-checkbox input:checked + .sd-check-box {
             border-color: var(--green);
         }
-        .nes-checkbox input:checked + .check-box::after {
+        .sd-checkbox input:checked + .sd-check-box::after {
             content: ''; position: absolute;
             top: 2px; left: 2px; right: 2px; bottom: 2px;
             background: var(--green);
@@ -234,7 +239,6 @@
         .name-scroll::-webkit-scrollbar { width: 6px; }
         .name-scroll::-webkit-scrollbar-track { background: var(--panel); }
         .name-scroll::-webkit-scrollbar-thumb { background: #444; border-radius: 3px; }
-        .time-input { width: 56px!important; max-width: 56px!important; text-align: center; }
         .unit { font-size: 9px; color: var(--gray); }
         .select-info {
             font-size: 9px; color: var(--yellow); line-height: 1.8;
@@ -351,7 +355,7 @@
             
             .player-inputs { gap: 6px; }
             .player-row { font-size: 8px; gap: 6px; }
-            .nes-input { font-size: 9px; padding: 6px; }
+            .sd-input { font-size: 9px; padding: 6px; }
             
             .btn { padding: 10px 16px; font-size: 9px; }
             .btn-group { gap: 8px; }
@@ -422,17 +426,29 @@
         </div>
         <div class="setup-row">
             <span class="setup-label"></span>
-            <label class="nes-checkbox">
+            <label class="sd-checkbox">
                 <input type="checkbox" id="use-names" onchange="buildPlayerInputs();saveSetup()">
-                <span class="check-box"></span>
+                <span class="sd-check-box"></span>
                 <span>이름 입력</span>
+            </label>
+        </div>
+        <div class="setup-row">
+            <span class="setup-label"></span>
+            <label class="sd-checkbox">
+                <input type="checkbox" id="use-nes-chars" onchange="saveSetup()">
+                <span class="sd-check-box"></span>
+                <span>NES 캐릭터</span>
             </label>
         </div>
         <div class="player-list" id="player-list"></div>
         <div class="setup-row">
             <span class="setup-label">레이스 시간</span>
-            <input type="number" class="nes-input time-input" id="time-input" value="10" min="3" max="60" onchange="saveSetup()">
-            <span class="unit">SEC</span>
+            <div class="count-controls">
+                <button class="count-btn" onclick="changeTime(-1)">-</button>
+                <input type="number" id="time-input" value="10" min="3" max="60" oninput="setTime(this.value)">
+                <button class="count-btn" onclick="changeTime(1)">+</button>
+                <span class="unit">SEC</span>
+            </div>
         </div>
         <div style="display:flex;gap:12px;margin-top:12px">
             <button class="btn" onclick="resetSetup()" style="font-size:10px">RESET</button>
@@ -486,6 +502,19 @@ const SLIME_COLORS = [
     { hex: '#44dddd', dark: '#228888', light: '#88ffee' },
 ];
 const DEFAULT_NAMES = ['초록이','파랑이','빨강이','노랑이','보라','핑크','주황이','하늘이'];
+
+const NES_CHARS = [
+    { cls: 'nes-mario', name: '마리오' },
+    { cls: 'nes-ash', name: '사토시' },
+    { cls: 'nes-kirby', name: '커비' },
+    { cls: 'nes-bulbasaur', name: '이상해씨' },
+    { cls: 'nes-charmander', name: '파이리' },
+    { cls: 'nes-squirtle', name: '꼬부기' },
+    { cls: 'nes-pokeball', name: '몬스터볼' },
+    { cls: 'nes-octocat', name: '옥토캣' },
+];
+let nesCharImages = [];
+let useNESChars = false;
 
 // ── Canvas constants ──
 const CW = 800, CH = 480;
@@ -572,6 +601,89 @@ function sfxBoost() { tone(660,.06); setTimeout(()=>tone(880,.06),60); setTimeou
 function sfxTrip() { tone(300,.08); setTimeout(()=>tone(180,.15,'sawtooth'),80); }
 function sfxSleep() { tone(220,.2,'sine',0.04); }
 
+// ── NES character pre-rendering ──
+function preRenderNESChars() {
+    nesCharImages = [];
+    const container = document.createElement('div');
+    container.style.cssText = 'position:absolute;left:-9999px;top:-9999px;';
+    document.body.appendChild(container);
+
+    for (const ch of NES_CHARS) {
+        const el = document.createElement('i');
+        el.className = ch.cls;
+        container.appendChild(el);
+
+        const style = window.getComputedStyle(el, '::before');
+        const shadowStr = style.boxShadow;
+        const baseColor = style.color;
+        const pixelSize = parseInt(style.width) || 6;
+
+        // Parse box-shadow: "rgb(r,g,b) Xpx Ypx 0px 0px, ..."
+        const pixels = [];
+        let maxX = 0, maxY = 0;
+
+        if (shadowStr && shadowStr !== 'none') {
+            // Split by commas that are NOT inside rgb()/rgba() parentheses
+            const parts = [];
+            let depth = 0, start = 0;
+            for (let i = 0; i < shadowStr.length; i++) {
+                if (shadowStr[i] === '(') depth++;
+                else if (shadowStr[i] === ')') depth--;
+                else if (shadowStr[i] === ',' && depth === 0) {
+                    parts.push(shadowStr.substring(start, i).trim());
+                    start = i + 1;
+                }
+            }
+            parts.push(shadowStr.substring(start).trim());
+
+            for (const part of parts) {
+                // Match: optional color then Xpx Ypx ...
+                const colorMatch = part.match(/^(rgba?\([^)]+\))\s+/);
+                let color, rest;
+                if (colorMatch) {
+                    color = colorMatch[1];
+                    rest = part.substring(colorMatch[0].length);
+                } else {
+                    color = baseColor || '#000';
+                    rest = part;
+                }
+                const nums = rest.match(/-?\d+(\.\d+)?/g);
+                if (nums && nums.length >= 2) {
+                    const px = parseFloat(nums[0]);
+                    const py = parseFloat(nums[1]);
+                    pixels.push({ x: px, y: py, color });
+                    if (px + pixelSize > maxX) maxX = px + pixelSize;
+                    if (py + pixelSize > maxY) maxY = py + pixelSize;
+                }
+            }
+        }
+
+        // Also account for the ::before element itself (drawn at 0,0)
+        if (maxX === 0) maxX = pixelSize;
+        if (maxY === 0) maxY = pixelSize;
+
+        const offCanvas = document.createElement('canvas');
+        offCanvas.width = maxX;
+        offCanvas.height = maxY;
+        const offCtx = offCanvas.getContext('2d');
+
+        // Draw the ::before element pixel at origin
+        if (baseColor && baseColor !== 'rgba(0, 0, 0, 0)') {
+            offCtx.fillStyle = baseColor;
+            offCtx.fillRect(0, 0, pixelSize, pixelSize);
+        }
+
+        // Draw all shadow pixels
+        for (const p of pixels) {
+            offCtx.fillStyle = p.color;
+            offCtx.fillRect(p.x, p.y, pixelSize, pixelSize);
+        }
+
+        nesCharImages.push(offCanvas);
+    }
+    document.body.removeChild(container);
+}
+
 // ── Screen management ──
 function showScreen(id) {
     document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
@@ -610,6 +722,20 @@ function setCount(val) {
     saveSetup();
 }
 
+function changeTime(d) {
+    targetTime = Math.max(3, Math.min(60, (parseInt(document.getElementById('time-input').value) || 10) + d));
+    document.getElementById('time-input').value = targetTime;
+    saveSetup();
+    sfxTick();
+}
+
+function setTime(val) {
+    const n = parseInt(val);
+    if (!isNaN(n)) targetTime = Math.max(3, Math.min(60, n));
+    document.getElementById('time-input').value = targetTime;
+    saveSetup();
+}
+
 function buildPlayerInputs() {
     const box = document.getElementById('player-list');
     const useNames = document.getElementById('use-names').checked;
@@ -644,7 +770,7 @@ function buildPlayerInputs() {
         row.innerHTML = `
             ${dot}
             <span class="player-num">${i+1}.</span>
-            <input class="nes-input" type="text" maxlength="8"
+            <input class="sd-input" type="text" maxlength="8"
                    data-idx="${i}" placeholder="${placeholder}"
                    value="${old[i] !== undefined ? old[i] : ''}"
                    onblur="saveSetup()">`;
@@ -696,10 +822,13 @@ function startRace() {
         });
     }
 
+    const nesMode = document.getElementById('use-nes-chars').checked;
+    const defaultNames = nesMode ? NES_CHARS.map(c => c.name) : DEFAULT_NAMES;
+
     if (playerCount <= 8) {
         players = [];
         for (let i = 0; i < playerCount; i++) {
-            const name = nameMap[i] || DEFAULT_NAMES[i];
+            const name = nameMap[i] || defaultNames[i];
             players.push(makePlayer(name, i));
         }
         beginRace();
@@ -836,6 +965,10 @@ function renderStadium() {
 }
 
 function beginRace() {
+    // Read NES character toggle
+    useNESChars = document.getElementById('use-nes-chars').checked;
+    if (useNESChars) preRenderNESChars();
+
     canvas = document.getElementById('race-canvas');
     ctx = canvas.getContext('2d');
     canvas.width = CW; canvas.height = CH;
@@ -1320,7 +1453,11 @@ function render() {
         const isWinner = finishOrder.length > 0 && finishOrder[0] === p;
         // Dim sleeping slimes
         if (p.fx === 'sleep') ctx.globalAlpha = 0.55;
-        drawSlime(sx, sy + bY, sz, sqX, sqY, drawColor, isWinner);
+        if (useNESChars) {
+            drawNESChar(sx, sy + bY, sz, sqX, sqY, i, isWinner);
+        } else {
+            drawSlime(sx, sy + bY, sz, sqX, sqY, drawColor, isWinner);
+        }
         if (p.fx === 'sleep') ctx.globalAlpha = 1;
     }
 
@@ -1493,6 +1630,52 @@ function drawSlime(x, y, size, sx, sy, color, crown) {
         ctx.fillStyle = '#ff3333';
         ctx.beginPath();
         ctx.arc(0, cy+cw*0.18, cw*0.12, 0, Math.PI*2);
+        ctx.fill();
+    }
+
+    ctx.restore();
+}
+
+// ── Draw NES character ──
+function drawNESChar(x, y, size, sx, sy, charIdx, crown) {
+    const img = nesCharImages[charIdx % nesCharImages.length];
+    if (!img || img.width === 0) return;
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.scale(sx, sy);
+
+    // Shadow
+    ctx.fillStyle = 'rgba(0,0,0,0.25)';
+    ctx.beginPath();
+    ctx.ellipse(0, size * 0.55, size * 0.75, size * 0.14, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Character image (centered at bottom)
+    const scale = (size * 2) / Math.max(img.width, img.height);
+    const w = img.width * scale, h = img.height * scale;
+    ctx.drawImage(img, -w / 2, -h + size * 0.3, w, h);
+
+    // Crown (same logic as drawSlime)
+    if (crown) {
+        const rw = size, rh = size * 0.82;
+        const cw = rw * 0.5, cy = -rh - cw * 0.5 - size * 0.3;
+        ctx.fillStyle = '#ffd700';
+        ctx.beginPath();
+        ctx.moveTo(-cw, cy + cw * 0.5);
+        ctx.lineTo(-cw, cy);
+        ctx.lineTo(-cw * 0.4, cy + cw * 0.3);
+        ctx.lineTo(0, cy - cw * 0.15);
+        ctx.lineTo(cw * 0.4, cy + cw * 0.3);
+        ctx.lineTo(cw, cy);
+        ctx.lineTo(cw, cy + cw * 0.5);
+        ctx.closePath();
+        ctx.fill();
+        ctx.strokeStyle = '#b8860b';
+        ctx.lineWidth = 0.8;
+        ctx.stroke();
+        ctx.fillStyle = '#ff3333';
+        ctx.beginPath();
+        ctx.arc(0, cy + cw * 0.18, cw * 0.12, 0, Math.PI * 2);
         ctx.fill();
     }
 
@@ -1686,6 +1869,7 @@ function saveSetup() {
     const data = {
         count: playerCount,
         useNames: document.getElementById('use-names').checked,
+        useNESChars: document.getElementById('use-nes-chars').checked,
         names,
         time: parseInt(document.getElementById('time-input').value) || 10,
     };
@@ -1703,6 +1887,9 @@ function loadSetup() {
         }
         if (d.useNames) {
             document.getElementById('use-names').checked = true;
+        }
+        if (d.useNESChars) {
+            document.getElementById('use-nes-chars').checked = true;
         }
         if (d.time != null) {
             document.getElementById('time-input').value = Math.max(3, Math.min(60, d.time));
@@ -1723,6 +1910,7 @@ function resetSetup() {
     playerCount = 4;
     document.getElementById('player-count').value = 4;
     document.getElementById('use-names').checked = false;
+    document.getElementById('use-nes-chars').checked = false;
     document.getElementById('time-input').value = 10;
     buildPlayerInputs();
     sfxTick();

@@ -1,4 +1,4 @@
-const CACHE_VERSION = 'slime-derby-v1';
+const CACHE_VERSION = 'slime-derby-v2';
 const ASSETS = [
   './',
   './index.html',
